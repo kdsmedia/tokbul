@@ -51,10 +51,9 @@ Setiap kali seorang pengguna mengirimkan like, gift, atau melakukan share, aplik
         ```
    
 ### Jalankan
-
-        ```bash
-        npm start
-        ```
+       ```
+       npm start
+       ```
 
 
 
