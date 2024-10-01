@@ -24,37 +24,49 @@ Setiap kali seorang pengguna mengirimkan like, gift, atau melakukan share, aplik
 
 ## Cara Menggunakan
 
-### Instalasi
+# Instalasi Proyek Belekok
+
+Panduan ini menjelaskan langkah-langkah untuk menginstal dan menjalankan proyek Belekok. Pastikan Anda memiliki akses ke terminal atau command prompt di sistem Anda.
+
+## Prasyarat
+
+Sebelum memulai, pastikan Anda memiliki hal-hal berikut:
+
+- **Git**: Alat untuk meng-clone repositori. Anda dapat mengunduhnya dari [sini](https://git-scm.com/downloads).
+- **Node.js**: Platform untuk menjalankan aplikasi JavaScript. Pastikan juga `npm` (Node Package Manager) terinstal bersamaan dengan Node.js. Anda dapat mengunduhnya dari [sini](https://nodejs.org/en/download/).
+
+## Langkah-langkah Instalasi
 
 1. **Clone repositori**:
 
    - **CMD (Windows)**:
+     Buka Command Prompt dan jalankan perintah berikut:
      ```bash
      git clone https://github.com/kdsmedia/belekok.git
      ```
 
    - **Termux (Android)**:
+     Buka Termux dan jalankan perintah berikut:
      ```bash
      pkg install git
      git clone https://github.com/kdsmedia/belekok.git
      ```
 
    - **Linux**:
+     Buka terminal dan jalankan perintah berikut:
      ```bash
+     sudo apt-get update
      sudo apt-get install git
      git clone https://github.com/kdsmedia/belekok.git
      ```
 
 2. **Masuk ke direktori proyek**:
-        ```bash
-        cd belekok
-        ```
-   
-3. **Jalankan**:
-       ```
-       npm start
-       ```
+   Setelah repositori berhasil di-clone, masuk ke direktori proyek dengan perintah berikut:
+   ```bash
+   cd belekok
+   ```
 
+   
 
 
 Server akan berjalan di http://localhost:8084. Anda dapat mengakses aplikasi melalui browser menggunakan URL ini.
