@@ -56,7 +56,6 @@ Setiap kali seorang pengguna mengirimkan like, gift, atau melakukan share, aplik
         npm start
         ```
 
-###========================================================================================================================
 
 
 Server akan berjalan di http://localhost:8084. Anda dapat mengakses aplikasi melalui browser menggunakan URL ini.
