@@ -50,7 +50,7 @@ Setiap kali seorang pengguna mengirimkan like, gift, atau melakukan share, aplik
         cd belekok
         ```
    
-### Jalankan
+3. **Jalankan**:
        ```
        npm start
        ```
