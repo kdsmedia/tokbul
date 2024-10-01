@@ -46,15 +46,15 @@ Setiap kali seorang pengguna mengirimkan like, gift, atau melakukan share, aplik
      ```
 
 2. **Masuk ke direktori proyek**:
-     ```bash
-     cd belekok
-     ```
+        ```bash
+        cd belekok
+        ```
    
 ### Jalankan
 
-     ```
-     npm start
-     ```
+        ```bash
+        npm start
+        ```
 
 ###========================================================================================================================
 
