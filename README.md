@@ -110,4 +110,4 @@ Dengan menggunakan proyek ini, Anda setuju untuk mematuhi semua ketentuan yang d
 
 ## Lisensi
 
-MIT
+[MIT](https://github.com/kdsmedia/tokbul/blob/main/LICENSE)
