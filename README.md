@@ -1,7 +1,4 @@
-# belekok
-# tokbul
-
-# Belekok
+# TOKBUL
 
 Belekok adalah aplikasi berbasis Node.js yang mengintegrasikan Express dan WebSocket untuk menciptakan pengalaman interaktif dalam siaran langsung TikTok. Dengan menggunakan `tiktok-live-connector`, aplikasi ini memungkinkan pengguna untuk berinteraksi secara real-time dengan siaran, mengelola likes, gifts, dan shares dari pengguna lain.
 
