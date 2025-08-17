@@ -1,21 +1,27 @@
+// server.js
+
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const { WebcastPushConnection } = require('tiktok-live-connector');
 const path = require('path');
 
-// Create Express app and HTTP server
+// Buat aplikasi Express dan server HTTP
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// Data sesi pengguna
-let userLikes = {}; // Menyimpan jumlah likes per pengguna
-let userGifts = {}; // Menyimpan jumlah gifts per pengguna
-let userShares = {}; // Menyimpan jumlah shares per pengguna
-let userProfiles = {}; // Menyimpan data profil pengguna
+// --- Variabel Global untuk State Aplikasi ---
 
-// Array gambar yang akan ditampilkan untuk like
+// Koneksi tunggal ke TikTok Live
+let tiktokLiveConnection;
+
+// Data sesi pengguna (disimpan di memori)
+let userLikes = {}; // Menyimpan total likes per pengguna
+let userGifts = {}; // Menyimpan total gifts per pengguna
+let userShares = {}; // Menyimpan total shares per pengguna
+
+// Array gambar yang akan ditampilkan untuk jumlah like tertentu
 const profilePictures = [
     'public/images/image1.jpg', // Gambar untuk 1 like
     'public/images/image2.jpg', // Gambar untuk 2 likes
@@ -23,194 +29,176 @@ const profilePictures = [
     // Tambahkan lebih banyak gambar sesuai kebutuhan
 ];
 
-// Fungsi untuk mengupdate jumlah likes per pengguna
-function updateUserLikes(username, likeCount) {
-    userLikes[username] = (userLikes[username] || 0) + likeCount;
 
-    // Tentukan gambar yang akan ditampilkan berdasarkan jumlah like
-    let pictureIndex = Math.min(userLikes[username] - 1, profilePictures.length - 1);
-    const profilePictureUrl = profilePictures[pictureIndex];
+// --- Fungsi Helper ---
 
-    // Kirimkan update gambar profil dan jumlah like ke klien
+/**
+ * Mengirim pesan ke semua klien WebSocket yang terhubung.
+ * @param {object} data Objek data yang akan dikirim.
+ */
+function broadcast(data) {
     wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({
-                type: 'updateProfilePicture',
-                username: username,
-                pictureUrl: profilePictureUrl,
-                likes: userLikes[username],
-                gifts: userGifts[username] || 0,
-                shares: userShares[username] || 0
-            }));
+            client.send(JSON.stringify(data));
         }
     });
 }
 
-// Fungsi untuk memperbarui tampilan foto profil pengguna
-function updateProfilePicture(username) {
-    const profileInfo = {
-        username: username,
-        likes: userLikes[username] || 0,
-        gifts: userGifts[username] || 0,
-        shares: userShares[username] || 0
-    };
+/**
+ * Memperbarui data like pengguna dan menyiarkan pembaruan gambar profil.
+ * @param {object} data Data event 'like' dari TikTok.
+ */
+function updateUserLikes(data) {
+    const { uniqueId, likeCount, profilePictureUrl } = data;
+    userLikes[uniqueId] = (userLikes[uniqueId] || 0) + likeCount;
 
-    wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({
-                type: 'updateProfilePicture',
-                ...profileInfo
-            }));
-        }
+    // Tentukan gambar yang akan ditampilkan berdasarkan jumlah total like
+    // Math.min digunakan untuk memastikan kita tidak keluar dari batas array
+    const pictureIndex = Math.min(userLikes[uniqueId] - 1, profilePictures.length - 1);
+    const updatedPictureUrl = profilePictures[pictureIndex] || profilePictureUrl; // Gunakan gambar asli jika indeks tidak valid
+
+    // Siarkan pembaruan ke semua klien
+    broadcast({
+        type: 'updateProfilePicture',
+        username: uniqueId,
+        pictureUrl: updatedPictureUrl,
+        likes: userLikes[uniqueId],
+        gifts: userGifts[uniqueId] || 0,
+        shares: userShares[uniqueId] || 0
     });
 }
 
-// Serve static files from the 'public' directory
+/**
+ * Memperbarui data gift pengguna.
+ * @param {object} data Data event 'gift' dari TikTok.
+ */
+function updateUserGifts(data) {
+    const { uniqueId, repeatCount } = data;
+    userGifts[uniqueId] = (userGifts[uniqueId] || 0) + repeatCount;
+}
+
+/**
+ * Memperbarui data share pengguna.
+ * @param {object} data Data event 'share' dari TikTok.
+ */
+function updateUserShares(data) {
+    const { uniqueId } = data;
+    userShares[uniqueId] = (userShares[uniqueId] || 0) + 1;
+}
+
+
+// --- Pengaturan Server ---
+
+// Sajikan file statis dari direktori 'public'
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Variable to hold TikTok username
-let tiktokLiveConnection;
-
-// Function to play sound on client
-function playSound(ws, soundPath) {
-    ws.send(JSON.stringify({
-        type: 'play-sound',
-        sound: soundPath
-    }));
-}
-
-// Function to display floating photo
-function displayFloatingPhoto(ws, profilePictureUrl, userName) {
-    ws.send(JSON.stringify({
-        type: 'floating-photo',
-        profilePictureUrl: profilePictureUrl,
-        userName: userName
-    }));
-}
-
-// Function to show big photo
-function showBigPhoto(ws, profilePictureUrl, userName) {
-    ws.send(JSON.stringify({
-        type: 'big-photo',
-        profilePictureUrl: profilePictureUrl,
-        userName: userName
-    }));
-}
-
-// Function to handle member join
-function handleMemberJoin(ws, data) {
-    console.log(`${data.uniqueId} joined the stream!`);
-    displayFloatingPhoto(ws, data.profilePictureUrl, data.uniqueId);
-    playSound(ws, 'sounds/hallo.mp3');
-}
-
-// Function to handle gift
-function handleGift(ws, data) {
-    if (data.giftType === 1 && !data.repeatEnd) {
-        // Streak in progress => show only temporary
-        console.log(`${data.uniqueId} is sending gift ${data.giftName} x${data.repeatCount}`);
-    } else {
-        // Streak ended or non-streakable gift => process the gift with final repeat_count
-        console.log(`${data.uniqueId} has sent gift ${data.giftName} x${data.repeatCount}`);
-        showBigPhoto(ws, data.profilePictureUrl, data.uniqueId);
-        playSound(ws, 'sounds/winner.mp3');
-    }
-}
-
-// Function to handle like
-function handleLike(ws, data) {
-    console.log(`${data.uniqueId} sent ${data.likeCount} likes`);
-    for (let i = 0; i < data.likeCount; i++) {
-        setTimeout(() => {
-            displayFloatingPhoto(ws, data.profilePictureUrl, data.uniqueId);
-        }, i * 1000); // Delay each like
-    }
-}
-
-// Function to handle share
-function handleShare(ws, data) {
-    console.log(`${data.uniqueId} shared the stream!`);
-    displayFloatingPhoto(ws, data.profilePictureUrl, data.uniqueId);
-    playSound(ws, 'sounds/kentut.mp3');
-}
-
-// Function to handle envelope
-function handleEnvelope(ws, data) {
-    console.log('Envelope received:', data);
-    playSound(ws, 'sounds/anjay.mp3');
-}
-
-// WebSocket connection handling
+// Tangani koneksi WebSocket
 wss.on('connection', (ws) => {
-    console.log('WebSocket connection established.');
+    console.log('Klien WebSocket baru terhubung.');
 
-    // Handle incoming messages from clients
+    // Kirim pesan konfirmasi ke klien yang baru terhubung
+    ws.send(JSON.stringify({ type: 'connected' }));
+
+    // Tangani pesan yang masuk dari klien
     ws.on('message', (message) => {
-        const data = JSON.parse(message);
-        if (data.type === 'connect') {
-            const username = data.username;
-            console.log('Connecting to TikTok with username:', username);
+        let data;
+        try {
+            data = JSON.parse(message);
+        } catch (error) {
+            console.error('Pesan tidak valid diterima:', message);
+            return;
+        }
+        
+        // Hanya proses pesan dengan tipe 'connect'
+        if (data.type === 'connect' && data.username) {
+            const tiktokUsername = data.username;
+            console.log(`Menerima permintaan untuk terhubung ke TikTok user: ${tiktokUsername}`);
 
-            // If there's an existing connection, disconnect it
+            // Jika sudah ada koneksi, putuskan dulu
             if (tiktokLiveConnection) {
+                console.log('Memutuskan koneksi lama...');
                 tiktokLiveConnection.disconnect();
             }
 
-            // Create a new WebcastPushConnection object with the new username
-            tiktokLiveConnection = new WebcastPushConnection(username);
+            // Buat instance koneksi baru
+            tiktokLiveConnection = new WebcastPushConnection(tiktokUsername);
 
+            // Hubungkan ke stream
             tiktokLiveConnection.connect().then(state => {
-                console.info(`Connected to roomId ${state.roomId}`);
+                console.info(`Berhasil terhubung ke Room ID: ${state.roomId}`);
+                // Kirim pesan sukses hanya ke klien yang meminta
+                ws.send(JSON.stringify({ type: 'connectionSuccess', message: `Terhubung ke @${tiktokUsername}` }));
             }).catch(err => {
-                console.error('Failed to connect', err);
+                console.error('Gagal terhubung ke TikTok', err);
+                // Kirim pesan gagal hanya ke klien yang meminta
+                ws.send(JSON.stringify({ type: 'connectionFailed', message: `Gagal terhubung. Pastikan @${tiktokUsername} sedang live.` }));
             });
-
-            tiktokLiveConnection.on('connected', (state) => {
-                console.log('Hurray! Connected!', state);
-            });
-
-            tiktokLiveConnection.on('disconnected', () => {
-                console.log('Disconnected :(');
-            });
-
-            tiktokLiveConnection.on('streamEnd', (actionId) => {
-                console.log('Stream ended with actionId:', actionId);
-                // Handle stream end event
-            });
-
-            tiktokLiveConnection.on('member', (data) => handleMemberJoin(ws, data));
-
-            tiktokLiveConnection.on('gift', (data) => handleGift(ws, data));
-
-            tiktokLiveConnection.on('like', (data) => handleLike(ws, data));
-
-            tiktokLiveConnection.on('share', (data) => handleShare(ws, data));
-
-            tiktokLiveConnection.on('envelope', (data) => handleEnvelope(ws, data));
+            
+            // --- Atur Event Listeners untuk Koneksi TikTok ---
+            // Ini akan menyiarkan event ke SEMUA klien yang terhubung
 
             tiktokLiveConnection.on('chat', (data) => {
-                console.log(`${data.uniqueId} (userId:${data.userId}) writes: ${data.comment}`);
-                ws.send(JSON.stringify({
+                console.log(`${data.uniqueId} menulis: ${data.comment}`);
+                broadcast({
                     type: 'chat',
                     userName: data.uniqueId,
                     comment: data.comment
-                }));
+                });
             });
 
-            tiktokLiveConnection.on('websocketConnected', (websocketClient) => {
-                console.log("Websocket:", websocketClient.connection);
+            tiktokLiveConnection.on('member', (data) => {
+                console.log(`${data.uniqueId} bergabung!`);
+                broadcast({ type: 'floating-photo', profilePictureUrl: data.profilePictureUrl, userName: data.uniqueId });
+                broadcast({ type: 'play-sound', sound: 'sounds/hallo.mp3' });
+            });
+
+            tiktokLiveConnection.on('like', (data) => {
+                console.log(`${data.uniqueId} mengirim ${data.likeCount} suka`);
+                updateUserLikes(data); // Perbarui statistik like
+                
+                // Kirim event untuk animasi foto melayang
+                broadcast({ type: 'floating-photo', profilePictureUrl: data.profilePictureUrl, userName: data.uniqueId, count: data.likeCount });
+            });
+
+            tiktokLiveConnection.on('gift', (data) => {
+                // Proses gift hanya jika bukan bagian dari streak yang sedang berjalan
+                if (data.giftType === 1 && !data.repeatEnd) {
+                    return;
+                }
+                
+                console.log(`${data.uniqueId} mengirim gift ${data.giftName} x${data.repeatCount}`);
+                updateUserGifts(data); // Perbarui statistik gift
+
+                broadcast({ type: 'big-photo', profilePictureUrl: data.profilePictureUrl, userName: data.uniqueId });
+                broadcast({ type: 'play-sound', sound: 'sounds/winner.mp3' });
+            });
+
+            tiktokLiveConnection.on('share', (data) => {
+                console.log(`${data.uniqueId} membagikan stream!`);
+                updateUserShares(data); // Perbarui statistik share
+
+                broadcast({ type: 'floating-photo', profilePictureUrl: data.profilePictureUrl, userName: data.uniqueId });
+                broadcast({ type: 'play-sound', sound: 'sounds/kentut.mp3' });
+            });
+            
+            tiktokLiveConnection.on('envelope', (data) => {
+                console.log('Amplop diterima:', data);
+                broadcast({ type: 'play-sound', sound: 'sounds/anjay.mp3' });
             });
 
             tiktokLiveConnection.on('roomUser', (data) => {
-                console.log(`Viewer Count: ${data.viewerCount}`);
-                ws.send(JSON.stringify({
-                    type: 'roomUser',
-                    viewerCount: data.viewerCount
-                }));
+                // console.log(`Jumlah penonton: ${data.viewerCount}`); // Bisa terlalu 'berisik' di log
+                broadcast({ type: 'roomUser', viewerCount: data.viewerCount });
             });
 
-            ws.on('close', () => {
-                console.log('WebSocket connection closed.');
+            tiktokLiveConnection.on('disconnected', () => {
+                console.log('Koneksi ke TikTok terputus.');
+                broadcast({ type: 'tiktokDisconnected', message: 'Koneksi ke TikTok Live terputus.' });
+            });
+            
+            tiktokLiveConnection.on('streamEnd', (actionId) => {
+                console.log('Stream TikTok telah berakhir.');
+                broadcast({ type: 'streamEnded', message: 'Stream TikTok telah berakhir.' });
                 if (tiktokLiveConnection) {
                     tiktokLiveConnection.disconnect();
                 }
@@ -218,11 +206,14 @@ wss.on('connection', (ws) => {
         }
     });
 
-    ws.send(JSON.stringify({ type: 'connected' }));
+    ws.on('close', () => {
+        console.log('Klien WebSocket terputus.');
+        // Kita tidak memutuskan koneksi TikTok di sini agar tetap berjalan untuk klien lain.
+    });
 });
 
-// Automatically find an available port and start the server
+// Jalankan server
 const port = 8084;
 server.listen(port, () => {
-    console.log(`Server running at http://localhost:${port}`);
+    console.log(`Server berjalan di http://localhost:${port}`);
 });
